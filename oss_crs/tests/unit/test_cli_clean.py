@@ -7,10 +7,18 @@ Verifies that:
 3. All expected image patterns are correctly matched.
 """
 
+import sys
+from unittest.mock import MagicMock, patch
+
+if "fcntl" not in sys.modules:
+    try:
+        import fcntl  # noqa: F401
+    except ImportError:
+        sys.modules["fcntl"] = MagicMock()
+
 import docker.errors
 import json
 from pathlib import Path
-from unittest.mock import MagicMock, patch
 
 from oss_crs.src.cli.discovery import (
     discover_build_target_images,
@@ -925,3 +933,36 @@ class TestGetBakeImageTags:
             result = crs.get_bake_image_tags()
 
         assert result == []
+
+
+class TestDirSize:
+    def test_dir_size_regular_files(self, tmp_path: Path):
+        from oss_crs.src.cli.clean import _dir_size
+
+        d = tmp_path / "artifacts"
+        d.mkdir()
+        (d / "f1.txt").write_bytes(b"A" * 100)
+        (d / "f2.txt").write_bytes(b"B" * 200)
+
+        size_str = _dir_size(d)
+        assert size_str == "300.0 B"
+
+    def test_dir_size_skips_symlinks(self, tmp_path: Path):
+        from oss_crs.src.cli.clean import _dir_size
+
+        outside = tmp_path / "outside"
+        outside.mkdir()
+        (outside / "large.bin").write_bytes(b"X" * 10000)
+
+        d = tmp_path / "artifacts"
+        d.mkdir()
+        (d / "small.txt").write_bytes(b"Y" * 50)
+
+        link = d / "link_to_outside"
+        try:
+            link.symlink_to(outside)
+        except (OSError, NotImplementedError):
+            pass
+
+        size_str = _dir_size(d)
+        assert size_str == "50.0 B"

@@ -69,7 +69,14 @@ def _dir_size(path: Path) -> str:
 
     total = 0
     try:
+        resolved_root = path.resolve()
         for f in path.rglob("*"):
+            if f.is_symlink():
+                continue
+            try:
+                f.resolve().relative_to(resolved_root)
+            except ValueError:
+                continue
             if f.is_file():
                 total += f.stat().st_size
     except PermissionError:
